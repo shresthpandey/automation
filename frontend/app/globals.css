@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+    
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    
+    --primary: 263.4 70% 50.4%;
+    --primary-foreground: 210 20% 98%;
+    
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+    
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 263.4 70% 50.4%;
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* Custom premium scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground)/0.4);
+}
+
+/* Rich design styles (Glow, Glassmorphism, Animations) */
+.glass-panel {
+  background: rgba(10, 10, 12, 0.45);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glow-indigo {
+  box-shadow: 0 0 40px -10px rgba(99, 102, 241, 0.15);
+}
+
+.glow-purple {
+  box-shadow: 0 0 40px -10px rgba(168, 85, 247, 0.15);
+}
+
+/* Smooth gradient transitions */
+.animate-gradient-shift {
+  background-size: 200% 200%;
+  animation: gradient-shift 8s ease infinite;
+}
+
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Soft hover scaling for cards */
+.hover-scale {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.hover-scale:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.5);
+}
+
+/* Custom pulse animations for indicators */
+.pulse-glow-emerald {
+  animation: pulse-emerald 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse-emerald {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0px rgba(16, 185, 129, 0.4);
+  }
+  50% {
+    opacity: .7;
+    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+  }
+}
+
