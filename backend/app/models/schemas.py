@@ -30,8 +30,8 @@ class MessageResponse(BaseModel):
     conversation_id: str
     sender_type: str
     content: str
-    status: str
-    channel: str
+    status: Optional[str] = "sent"
+    channel: Optional[str] = "whatsapp"
     created_at: datetime
 
     class Config:
