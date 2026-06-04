@@ -45,7 +45,7 @@ class ConversationResponse(BaseModel):
     id: str
     contact_id: str
     status: str
-    unread_count: int
+    unread_count: Optional[int] = 0
     last_message: Optional[str] = None
     last_message_at: datetime
     created_at: datetime
