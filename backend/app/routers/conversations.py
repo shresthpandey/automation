@@ -28,7 +28,7 @@ async def get_messages(conversation_id: str):
     """
     Loads all message bubbles associated with a given conversation ID.
     """
-    msg_res = supabase_client.table("messages").select("*").eq("conversation_id", conversation_id).order("created_at", asc=True).execute()
+    msg_res = supabase_client.table("messages").select("*").eq("conversation_id", conversation_id).order("created_at").execute()
     return msg_res.data or []
 
 async def dispatch_and_save_agent_msg(conversation_id: str, content: str, sender_type: str, channel: str):
