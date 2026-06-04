@@ -47,9 +47,9 @@ async def dispatch_and_save_agent_msg(conversation_id: str, content: str, sender
         # Save Agent Message record in DB
         supabase_client.table("messages").insert({
             "conversation_id": conversation_id,
+            "org_id": conv.get("org_id"),
             "sender_type": sender_type,
-            "content": content,
-            "channel": channel
+            "content": content
         }).execute()
         
         # Update last message preview metadata
