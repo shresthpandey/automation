@@ -115,12 +115,14 @@ export default function InboxPage() {
           });
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log("[InboxRealtime] Subscription status changed to:", status);
+      });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [activeId, conversations]);
+  }, [activeId]);
 
   // 4. Send Message Handler
   const handleSendMessage = async (content: string) => {
