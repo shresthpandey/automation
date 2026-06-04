@@ -54,9 +54,7 @@ async def dispatch_and_save_agent_msg(conversation_id: str, content: str, sender
         
         # Update last message preview metadata
         supabase_client.table("conversations").update({
-            "last_message": content,
-            "last_message_at": "now()",
-            "unread_count": 0
+            "last_message_at": "now()"
         }).eq("id", conversation_id).execute()
 
         # Send via WhatsApp / Twilio
