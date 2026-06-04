@@ -59,11 +59,15 @@ async def dispatch_and_save_agent_msg(conversation_id: str, content: str, sender
             "unread_count": 0
         }).eq("id", conversation_id).execute()
 
-        # Send via WhatsApp if channel matches
-        if channel == "whatsapp" and contact:
-            phone_num = contact.get("phone_number")
+        # Send via WhatsApp / Twilio
+        if channel in ("whatsapp", "twilio") and contact:
+            phone_num = contact.get("phone") or contact.get("phone_number")
             if phone_num:
-                await whatsapp_service.send_text_message(phone_num, content)
+                await whatsapp_service.send_text_message(
+                    phone=phone_num,
+                    message=content,
+                    channel=channel
+                )
                 
     except Exception as e:
         print(f"Failed to post manual response: {str(e)}")

@@ -1,5 +1,6 @@
 import logging
 from fastapi import APIRouter, Request, Query, HTTPException, BackgroundTasks
+from fastapi.responses import Response
 from app.config import settings
 from app.services.whatsapp import whatsapp_service
 
@@ -43,14 +44,39 @@ async def handle_whatsapp_webhook(
         payload = await request.json()
         logger.info("Received WhatsApp webhook transaction packet payload.")
         
-        # Dispatch transaction logic asynchronously
-        background_tasks.add_task(whatsapp_service.process_incoming_message, payload)
+        # Dispatch transaction logic asynchronously with is_twilio=False
+        background_tasks.add_task(whatsapp_service.process_incoming_message, payload, False)
         
         return {"status": "ok"}
     except Exception as e:
         logger.error(f"Error handling WhatsApp Webhook post payload: {str(e)}", exc_info=True)
         # Always return 200 OK to prevent Meta from retrying or disabling the webhook
         return {"status": "ok"}
+
+@router.post("/twilio-whatsapp")
+@router.post("/twilio")
+async def handle_twilio_whatsapp_webhook(
+    request: Request,
+    background_tasks: BackgroundTasks
+):
+    """
+    Receives incoming webhook event updates from Twilio (Form URL Encoded payload).
+    """
+    try:
+        form_data = await request.form()
+        payload = dict(form_data)
+        logger.info("Received Twilio WhatsApp webhook transaction packet payload.")
+        
+        # Dispatch transaction logic asynchronously with is_twilio=True
+        background_tasks.add_task(whatsapp_service.process_incoming_message, payload, True)
+        
+        # Return empty TwiML response
+        twiml_content = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>'
+        return Response(content=twiml_content, media_type="application/xml")
+    except Exception as e:
+        logger.error(f"Error handling Twilio Webhook post payload: {str(e)}", exc_info=True)
+        twiml_content = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>'
+        return Response(content=twiml_content, media_type="application/xml")
 
 @router.post("/whatsapp/test")
 @router.post("/test")
@@ -72,4 +98,3 @@ async def test_whatsapp_connection(request: Request):
     except Exception as e:
         logger.error(f"Error testing connection: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-

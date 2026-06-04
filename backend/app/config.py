@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
@@ -16,6 +17,11 @@ class Settings(BaseSettings):
     whatsapp_token: str
     whatsapp_verify_token: str
     whatsapp_phone_number_id: str
+
+    # Twilio Sandbox Configuration
+    twilio_account_sid: Optional[str] = None
+    twilio_auth_token: Optional[str] = None
+    twilio_whatsapp_number: Optional[str] = None
 
     class Config:
         env_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
