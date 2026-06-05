@@ -31,8 +31,8 @@ ALTER TABLE public.knowledge_base_documents ENABLE ROW LEVEL SECURITY;
 -- Knowledge Base Document Chunks
 ALTER TABLE public.knowledge_base_chunks ENABLE ROW LEVEL SECURITY;
 
--- Escalations
-ALTER TABLE public.escalations ENABLE ROW LEVEL SECURITY;
+-- Escalations (optional table, uncomment and run if you have created it)
+-- ALTER TABLE public.escalations ENABLE ROW LEVEL SECURITY;
 
 -- User Profiles / Auth Accounts
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
