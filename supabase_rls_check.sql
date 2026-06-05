@@ -26,10 +26,10 @@ ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 
 -- Knowledge Base Documents
-ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.knowledge_base_documents ENABLE ROW LEVEL SECURITY;
 
 -- Knowledge Base Document Chunks
-ALTER TABLE public.document_chunks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.knowledge_base_chunks ENABLE ROW LEVEL SECURITY;
 
 -- Escalations
 ALTER TABLE public.escalations ENABLE ROW LEVEL SECURITY;
