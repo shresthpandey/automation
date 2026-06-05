@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { ToastProvider } from "../components/shared/Toast";
 
 export const metadata: Metadata = {
   title: "ConverseOS - Omnichannel Chat Workspace",
@@ -14,7 +15,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen bg-background text-foreground selection:bg-indigo-500/30 selection:text-indigo-200">
-        {children}
+        <ToastProvider>
+          {children}
+        </ToastProvider>
       </body>
     </html>
   );

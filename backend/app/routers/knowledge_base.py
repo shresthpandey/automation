@@ -103,12 +103,90 @@ async def list_documents(org_id: str = Header(None)):
     """
     resolved_org_id = get_org_id_from_header(org_id)
     res = supabase_client.table("knowledge_base_documents") \
-        .select("id, file_name, file_url, file_type, status, chunk_count, created_at") \
+        .select("id, file_name, file_url, file_type, status, chunk_count, progress_message, error_message, created_at") \
         .eq("org_id", resolved_org_id) \
         .order("created_at", desc=True) \
         .execute()
         
     return res.data or []
+
+@router.get("/documents/{doc_id}/status")
+async def get_document_status(doc_id: str, org_id: str = Header(None)):
+    """
+    Retrieves progress and error tracking status for a specific document ingestion.
+    """
+    resolved_org_id = get_org_id_from_header(org_id)
+    res = supabase_client.table("knowledge_base_documents") \
+        .select("id, file_name, status, chunk_count, progress_message, error_message, created_at") \
+        .eq("id", doc_id) \
+        .eq("org_id", resolved_org_id) \
+        .execute()
+        
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Document not found.")
+        
+    return res.data[0]
+
+@router.post("/documents/{doc_id}/retry")
+async def retry_document_processing(
+    doc_id: str,
+    background_tasks: BackgroundTasks,
+    org_id: str = Header(None)
+):
+    """
+    Resets status and requeues a failed document for embedding ingestion processing.
+    """
+    resolved_org_id = get_org_id_from_header(org_id)
+    
+    # 1. Fetch document metadata
+    doc_res = supabase_client.table("knowledge_base_documents") \
+        .select("*") \
+        .eq("id", doc_id) \
+        .eq("org_id", resolved_org_id) \
+        .execute()
+        
+    if not doc_res.data:
+        raise HTTPException(status_code=404, detail="Document not found.")
+        
+    doc = doc_res.data[0]
+    
+    if doc["status"] != "failed":
+        raise HTTPException(status_code=400, detail="Only failed documents can be retried.")
+        
+    try:
+        # 2. Delete existing chunks for this document
+        supabase_client.table("knowledge_base_chunks") \
+            .delete() \
+            .eq("doc_id", doc_id) \
+            .execute()
+            
+        # 3. Reset document status
+        supabase_client.table("knowledge_base_documents") \
+            .update({
+                "status": "processing",
+                "progress_message": "Queued...",
+                "error_message": None,
+                "chunk_count": None
+            }) \
+            .eq("id", doc_id) \
+            .execute()
+            
+        # 4. Extract storage path from public URL
+        file_url = doc.get("file_url", "")
+        split_marker = "/knowledge-docs/"
+        if split_marker not in file_url:
+            raise ValueError("Invalid file URL structure.")
+            
+        storage_path = file_url.split(split_marker)[-1]
+        
+        # 5. Re-run processing background task
+        background_tasks.add_task(rag_service.process_document, doc_id, storage_path, resolved_org_id)
+        
+        return {"status": "requeued", "message": "Ingestion process restarted."}
+        
+    except Exception as e:
+        logger.error(f"Failed to retry document {doc_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to retry processing: {str(e)}")
 
 @router.delete("/documents/{doc_id}")
 async def delete_document(doc_id: str, org_id: str = Header(None)):

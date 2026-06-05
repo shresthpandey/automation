@@ -1,19 +1,34 @@
 "use client";
 
 import * as React from "react";
-import { Search, MessageSquare, ShieldAlert, Phone } from "lucide-react";
+import { Search, MessageSquare, Phone, Filter } from "lucide-react";
 import { Input } from "../ui/input";
 import { Conversation } from "../../types";
+import { EmptyState } from "../shared/EmptyState";
+import { ErrorState } from "../shared/ErrorState";
+import { cn } from "../../lib/utils";
 
 interface ConversationListProps {
   conversations: Conversation[];
   activeId: string;
   onSelect: (id: string) => void;
+  isLoading?: boolean;
+  isError?: boolean;
+  onRetry?: () => void;
+  currentView?: "list" | "chat";
 }
 
 type FilterType = "all" | "open" | "resolved" | "mine";
 
-export function ConversationList({ conversations, activeId, onSelect }: ConversationListProps) {
+export function ConversationList({
+  conversations,
+  activeId,
+  onSelect,
+  isLoading = false,
+  isError = false,
+  onRetry,
+  currentView = "list",
+}: ConversationListProps) {
   const [search, setSearch] = React.useState("");
   const [filter, setFilter] = React.useState<FilterType>("all");
 
@@ -23,7 +38,7 @@ export function ConversationList({ conversations, activeId, onSelect }: Conversa
       const date = new Date(timeStr);
       const diffMs = Date.now() - date.getTime();
       const diffMins = Math.floor(diffMs / 60000);
-      const diffHours = Math.floor(diffMins / 600);
+      const diffHours = Math.floor(diffMins / 3600000);
       
       if (diffMins < 1) return "just now";
       if (diffMins < 60) return `${diffMins}m ago`;
@@ -50,6 +65,11 @@ export function ConversationList({ conversations, activeId, onSelect }: Conversa
     return `Cold (${score})`;
   };
 
+  const clearFilters = () => {
+    setSearch("");
+    setFilter("all");
+  };
+
   // Filter & Search logic
   const filteredConversations = conversations.filter((conv) => {
     const contact = conv.contact || { name: "", phone_number: "", email: "" };
@@ -57,7 +77,7 @@ export function ConversationList({ conversations, activeId, onSelect }: Conversa
     // Search filter
     const matchesSearch = 
       contact.name.toLowerCase().includes(search.toLowerCase()) ||
-      contact.phone_number.includes(search) ||
+      (contact.phone_number || "").includes(search) ||
       (conv.last_message || "").toLowerCase().includes(search.toLowerCase());
 
     if (!matchesSearch) return false;
@@ -72,8 +92,73 @@ export function ConversationList({ conversations, activeId, onSelect }: Conversa
     return true;
   });
 
+  const listContainerClass = cn(
+    "w-full md:w-80 md:border-r border-border flex flex-col bg-background/50 h-full shrink-0 transition-all duration-300",
+    currentView === "list" ? "flex" : "hidden md:flex"
+  );
+
+  // LOADING State
+  if (isLoading) {
+    return (
+      <div className={listContainerClass}>
+        <div className="p-4 border-b border-border shrink-0">
+          <div className="h-9 bg-muted/40 border border-border/30 rounded-xl animate-pulse" />
+        </div>
+        <div className="flex border-b border-border bg-muted/10 shrink-0 h-10">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="flex-1 border-r border-border/20 bg-muted/5 animate-pulse" />
+          ))}
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="flex gap-3 animate-pulse">
+              <div className="h-10 w-10 shrink-0 rounded-full bg-gray-200 dark:bg-gray-700" />
+              <div className="flex-1 space-y-2 py-1">
+                <div className="flex justify-between">
+                  <div className="h-3.5 bg-gray-200 dark:bg-gray-700 rounded w-2/3" />
+                  <div className="h-2.5 bg-gray-200 dark:bg-gray-700 rounded w-1/6" />
+                </div>
+                <div className="h-2.5 bg-gray-200 dark:bg-gray-700 rounded w-1/3" />
+                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-3/4" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ERROR State
+  if (isError) {
+    return (
+      <div className={listContainerClass}>
+        <div className="flex-1 flex items-center justify-center p-4">
+          <ErrorState message="Failed to load conversations" onRetry={onRetry} />
+        </div>
+      </div>
+    );
+  }
+
+  // EMPTY State (No conversations at all)
+  if (conversations.length === 0) {
+    return (
+      <div className={listContainerClass}>
+        <div className="p-4 border-b border-border shrink-0">
+          <div className="h-9 bg-muted/40 border border-border/30 rounded-xl" />
+        </div>
+        <div className="flex-1 flex items-center justify-center p-4">
+          <EmptyState
+            icon={MessageSquare}
+            title="No conversations yet"
+            description="Connect your WhatsApp and start receiving messages."
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="w-80 border-r border-border flex flex-col bg-background/50 h-full">
+    <div className={listContainerClass}>
       {/* Search Bar header */}
       <div className="p-4 border-b border-border space-y-3 shrink-0">
         <div className="relative">
@@ -82,7 +167,7 @@ export function ConversationList({ conversations, activeId, onSelect }: Conversa
             placeholder="Search conversations..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 bg-muted/40 border-none h-9 focus-visible:ring-1 focus-visible:ring-primary"
+            className="pl-8 bg-muted/40 border-none h-9 focus-visible:ring-1 focus-visible:ring-primary text-base md:text-sm"
           />
         </div>
       </div>
@@ -93,7 +178,7 @@ export function ConversationList({ conversations, activeId, onSelect }: Conversa
           <button
             key={tab}
             onClick={() => setFilter(tab)}
-            className={`flex-1 py-2.5 text-center border-b-2 transition-all ${
+            className={`flex-1 py-3 md:py-2.5 text-center border-b-2 transition-all min-h-[44px] md:min-h-0 flex items-center justify-center ${
               filter === tab
                 ? "border-primary text-primary bg-primary/5"
                 : "border-transparent hover:text-foreground"
@@ -119,9 +204,10 @@ export function ConversationList({ conversations, activeId, onSelect }: Conversa
               <button
                 key={conv.id}
                 onClick={() => onSelect(conv.id)}
-                className={`w-full p-4 text-left transition-colors flex gap-3 relative ${
+                className={cn(
+                  "w-full p-4 text-left transition-colors flex gap-3 relative min-h-[72px]",
                   isActive ? "bg-primary/5 border-l-2 border-primary" : "hover:bg-muted/20"
-                }`}
+                )}
               >
                 {/* Contact Initials Avatar */}
                 <div className="h-10 w-10 shrink-0 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-semibold select-none">
@@ -170,9 +256,13 @@ export function ConversationList({ conversations, activeId, onSelect }: Conversa
             );
           })
         ) : (
-          <div className="flex flex-col items-center justify-center p-8 text-center text-muted-foreground italic h-48 select-none">
-            <MessageSquare className="h-6 w-6 mb-2 opacity-50" />
-            No conversations match
+          <div className="h-full flex items-center justify-center p-4">
+            <EmptyState
+              icon={Filter}
+              title="No conversations match this filter"
+              description="Try a different filter or search term."
+              action={{ label: "Clear filters", onClick: clearFilters }}
+            />
           </div>
         )}
       </div>

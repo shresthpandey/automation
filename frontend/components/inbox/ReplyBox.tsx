@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Send, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "../ui/button";
+import { useToast } from "../shared/Toast";
 
 interface ReplyBoxProps {
   conversationId: string;
@@ -15,6 +16,7 @@ export function ReplyBox({ conversationId, aiEnabled, onSend, onToggleAI }: Repl
   const [text, setText] = React.useState("");
   const [isSending, setIsSending] = React.useState(false);
   const [isSuggesting, setIsSuggesting] = React.useState(false);
+  const { error } = useToast();
   
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
@@ -27,7 +29,7 @@ export function ReplyBox({ conversationId, aiEnabled, onSend, onToggleAI }: Repl
   }, [text]);
 
   const handleSend = async () => {
-    if (!text.trim() || isSending) return;
+    if (!text.trim() || isSending || text.length > 4096) return;
     setIsSending(true);
     try {
       await onSend(text);
@@ -54,10 +56,15 @@ export function ReplyBox({ conversationId, aiEnabled, onSend, onToggleAI }: Repl
         const data = await response.json();
         if (data.reply) {
           setText(data.reply);
+        } else {
+          error("Could not get AI suggestion");
         }
+      } else {
+        error("Could not get AI suggestion");
       }
     } catch (e) {
       console.error("Failed to fetch AI suggestions: ", e);
+      error("Could not get AI suggestion");
     } finally {
       setIsSuggesting(false);
     }
@@ -65,6 +72,14 @@ export function ReplyBox({ conversationId, aiEnabled, onSend, onToggleAI }: Repl
 
   return (
     <div className="p-4 border-t border-border bg-card/30 backdrop-blur-md space-y-3">
+      {/* AI banner when aiEnabled is true */}
+      {aiEnabled && (
+        <div className="bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs px-3 py-2 rounded-xl flex items-center gap-2 font-medium animate-pulse select-none">
+          <Sparkles className="h-3.5 w-3.5 fill-current" />
+          <span>AI is handling this conversation</span>
+        </div>
+      )}
+
       {/* Configuration bar */}
       <div className="flex justify-between items-center text-xs">
         {/* Toggle auto reply */}
@@ -88,13 +103,13 @@ export function ReplyBox({ conversationId, aiEnabled, onSend, onToggleAI }: Repl
         {/* Suggestion action & Character Counter */}
         <div className="flex items-center gap-3">
           <span className={`font-medium text-[10px] sm:text-xs tracking-wider transition-colors ${
-            text.length >= 4096 ? "text-rose-500 font-bold" : "text-muted-foreground/80"
+            text.length > 3800 ? "text-rose-500 font-bold" : "text-muted-foreground/80"
           }`}>
             {text.length} / 4096
           </span>
           <Button
             onClick={handleFetchSuggestion}
-            disabled={isSuggesting}
+            disabled={isSuggesting || isSending}
             variant="outline"
             size="sm"
             className="h-8 border-indigo-500/20 bg-indigo-500/5 text-indigo-400 hover:bg-indigo-500/10 text-xs flex items-center gap-1.5 shadow-sm"
@@ -116,21 +131,23 @@ export function ReplyBox({ conversationId, aiEnabled, onSend, onToggleAI }: Repl
           rows={1}
           value={text}
           maxLength={4096}
+          disabled={isSending}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
+            // Ctrl+Enter to send
+            if (e.key === "Enter" && e.ctrlKey) {
               e.preventDefault();
               handleSend();
             }
           }}
-          placeholder="Type your reply here..."
-          className="flex-1 bg-muted/40 border border-border/80 rounded-xl px-3.5 py-2 text-sm shadow-inner placeholder:text-muted-foreground focus-visible:outline-none focus:border-primary/80 transition-colors resize-none overflow-hidden max-h-36 min-h-[40px] leading-relaxed"
+          placeholder="Type your reply here... (Ctrl+Enter to send)"
+          className="flex-1 bg-muted/40 border border-border/80 rounded-xl px-3.5 py-2.5 md:py-2 text-base md:text-sm shadow-inner placeholder:text-muted-foreground focus-visible:outline-none focus:border-primary/80 transition-colors resize-none overflow-hidden max-h-36 min-h-[44px] md:min-h-[40px] leading-relaxed disabled:opacity-50"
         />
         
         <Button
           onClick={handleSend}
           disabled={!text.trim() || text.length > 4096 || isSending}
-          className="h-10 w-10 shrink-0 rounded-xl bg-primary text-white hover:opacity-90 shadow-md transition-opacity"
+          className="h-11 w-11 shrink-0 rounded-xl bg-primary text-white hover:opacity-90 shadow-md transition-opacity"
         >
           {isSending ? (
             <Loader2 className="h-4.5 w-4.5 animate-spin" />

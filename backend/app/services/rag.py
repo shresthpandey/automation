@@ -85,16 +85,30 @@ class RAGService:
         logger.info("[RAG] Starting ingestion | doc=%s org=%s", doc_id, org_id)
         inserted_chunk_ids: List[str] = []
 
+        def _update_progress(progress: str, status: str = "processing", chunk_count: int = None) -> None:
+            try:
+                update_data = {
+                    "progress_message": progress,
+                    "status": status
+                }
+                if chunk_count is not None:
+                    update_data["chunk_count"] = chunk_count
+                supabase_client.table("knowledge_base_documents").update(update_data).eq("id", doc_id).execute()
+            except Exception as exc:
+                logger.error(f"Could not update progress for doc {doc_id}: {str(exc)}")
+
         def _mark_failed(reason: str) -> None:
             try:
                 supabase_client.table("knowledge_base_documents").update({
                     "status": "failed",
                     "error_message": reason[:500],
+                    "progress_message": "Failed"
                 }).eq("id", doc_id).execute()
             except Exception as exc:
                 log_error("SupabaseError", f"Could not mark doc {doc_id} as failed: {str(exc)}")
 
         # ── Phase 1: Download ───────────────────────
+        _update_progress("Downloading document...")
         try:
             raw_bytes = supabase_client.storage.from_("knowledge-docs").download(file_path)
             file_bytes = io.BytesIO(raw_bytes)
@@ -105,6 +119,7 @@ class RAGService:
             return
 
         # ── Phase 2: Parse text ─────────────────────
+        _update_progress("Extracting text...")
         extracted_text = ""
         try:
             lower = file_path.lower()
@@ -131,12 +146,14 @@ class RAGService:
             return
 
         # ── Phase 3: Chunk ──────────────────────────
+        _update_progress("Splitting into chunks...")
         file_name = file_path.split("/")[-1]
         chunks = self.chunk_text(extracted_text, file_name)
         logger.info("[RAG] Chunked into %d segments | doc=%s", len(chunks), doc_id)
 
         # ── Phase 4: Embed + Insert (with retry) ────
         for idx, chunk in enumerate(chunks):
+            _update_progress(f"Generating embeddings... ({idx + 1}/{len(chunks)} chunks)")
             # Embedding with retry
             vector = None
             for attempt in range(2):
@@ -189,6 +206,7 @@ class RAGService:
             supabase_client.table("knowledge_base_documents").update({
                 "status": "ready",
                 "chunk_count": len(chunks),
+                "progress_message": "Ready"
             }).eq("id", doc_id).execute()
             logger.info("[RAG] Ingestion complete | doc=%s | chunks=%d", doc_id, len(chunks))
         except Exception as exc:

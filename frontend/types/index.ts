@@ -27,7 +27,7 @@ export interface Message {
   conversation_id: string;
   sender_type: "customer" | "contact" | "agent" | "bot" | "ai";
   content: string;
-  status: "sent" | "delivered" | "read";
+  status: "sending" | "failed" | "sent" | "delivered" | "read";
   channel: string;
   created_at: string;
 }
