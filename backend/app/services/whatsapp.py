@@ -244,6 +244,29 @@ class WhatsAppService:
                 logger.error("[Webhook] Missing phone_number_id — cannot route to org.")
                 return
 
+            # ── Layer 2: DB idempotency check ─────────────────────────────────────
+            # Check messages table BEFORE doing any org/contact/conversation work.
+            # This is the definitive check: if the wamid/SID is already in DB,
+            # this is a duplicate delivery and we must not process it again.
+            if message_id:
+                try:
+                    dup_res = supabase_client.table("messages") \
+                        .select("id") \
+                        .eq("channel_message_id", message_id) \
+                        .limit(1) \
+                        .execute()
+                    if dup_res.data:
+                        logger.info(
+                            "[Idempotency] Duplicate message detected in DB, skipping | msg_id=%s",
+                            message_id,
+                        )
+                        return
+                except Exception as exc:
+                    # On DB error: proceed (fail open) — DB unique index is the final safety net
+                    logger.warning(
+                        "[Idempotency] DB dedup check failed (proceeding): %s", str(exc)
+                    )
+
             # ── Org lookup ──────────────────────────
             try:
                 org_res = supabase_client.table("organizations") \

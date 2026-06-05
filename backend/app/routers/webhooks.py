@@ -19,6 +19,7 @@ from app.config import settings
 from app.services.whatsapp import whatsapp_service
 from app.utils.error_handler import get_logger
 from app.utils.rate_limiter import rate_limiter
+from app.utils.idempotency import idempotency_checker
 
 logger = get_logger("webhooks_router")
 
@@ -163,9 +164,39 @@ async def handle_whatsapp_webhook(
         if not _check_rate_limits(phone=phone, org_key=org_phone_id):
             return {"status": "ok"}  # silently drop — never 4xx
 
-        background_tasks.add_task(
-            whatsapp_service.process_incoming_message, payload, False
-        )
+        # ── In-flight idempotency lock (Layer 1) ─────────────────────────────
+        # Extract message_id early for lock key (wamid.xxx format)
+        meta_msg_id = ""
+        try:
+            meta_msg_id = (
+                payload
+                .get("entry", [{}])[0]
+                .get("changes", [{}])[0]
+                .get("value", {})
+                .get("messages", [{}])[0]
+                .get("id", "")
+            )
+        except Exception:
+            pass
+
+        if meta_msg_id and await idempotency_checker.is_processing(meta_msg_id):
+            logger.info(
+                "[Idempotency] Meta msg already in-flight, dropping duplicate | msg_id=%s",
+                meta_msg_id,
+            )
+            return {"status": "ok"}
+
+        if meta_msg_id:
+            await idempotency_checker.mark_processing(meta_msg_id)
+
+        async def _process_and_unlock_meta():
+            try:
+                await whatsapp_service.process_incoming_message(payload, False)
+            finally:
+                if meta_msg_id:
+                    await idempotency_checker.mark_done(meta_msg_id)
+
+        background_tasks.add_task(_process_and_unlock_meta)
         return {"status": "ok"}
 
     except Exception as exc:
@@ -207,9 +238,27 @@ async def handle_twilio_whatsapp_webhook(
         if not _check_rate_limits(phone=phone, org_key=org_key):
             return Response(content=TWIML_EMPTY, media_type="application/xml")
 
-        background_tasks.add_task(
-            whatsapp_service.process_incoming_message, payload, True
-        )
+        # ── In-flight idempotency lock (Layer 1) ─────────────────────────────
+        twilio_msg_id = payload.get("MessageSid", "")
+
+        if twilio_msg_id and await idempotency_checker.is_processing(twilio_msg_id):
+            logger.info(
+                "[Idempotency] Twilio msg already in-flight, dropping duplicate | sid=%s",
+                twilio_msg_id,
+            )
+            return Response(content=TWIML_EMPTY, media_type="application/xml")
+
+        if twilio_msg_id:
+            await idempotency_checker.mark_processing(twilio_msg_id)
+
+        async def _process_and_unlock_twilio():
+            try:
+                await whatsapp_service.process_incoming_message(payload, True)
+            finally:
+                if twilio_msg_id:
+                    await idempotency_checker.mark_done(twilio_msg_id)
+
+        background_tasks.add_task(_process_and_unlock_twilio)
         return Response(content=TWIML_EMPTY, media_type="application/xml")
 
     except Exception as exc:

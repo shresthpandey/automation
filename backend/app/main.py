@@ -45,6 +45,11 @@ app.include_router(auth,          prefix="/api/auth",           tags=["Auth & On
 @app.on_event("startup")
 async def startup_health_check() -> None:
     logger.info("[Startup] ConverseOS backend initializing...")
+
+    # Start idempotency cleanup background task
+    from app.utils.idempotency import idempotency_checker
+    idempotency_checker.start_cleanup_task()
+
     try:
         res = supabase_client.table("organizations").select("id").limit(1).execute()
         if res.data is not None:
