@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     twilio_auth_token: Optional[str] = None
     twilio_whatsapp_number: Optional[str] = None
 
+    # Redis (optional — leave empty to use in-memory rate limiter)
+    redis_url: Optional[str] = None
+
     class Config:
         env_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
         env_file_encoding = "utf-8"
