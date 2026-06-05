@@ -12,12 +12,13 @@ from app.routers import webhooks, conversations, contacts, knowledge_base, ai, a
 
 logger = get_logger("main")
 
+is_prod = (settings.environment == "production")
 app = FastAPI(
     title=settings.app_name,
     description="Omnichannel workspace & AI automation engine backend.",
     version="1.0.0",
-    docs_url="/docs" if settings.debug else None,
-    redoc_url=None,
+    docs_url=None if is_prod else "/docs",
+    redoc_url=None if is_prod else "/redoc",
 )
 
 # ── CORS ─────────────────────────────────────────────────────────────────────
@@ -39,6 +40,22 @@ app.include_router(contacts,      prefix="/api/contacts",       tags=["Contacts"
 app.include_router(knowledge_base,prefix="/api/knowledge-base", tags=["Knowledge Base"])
 app.include_router(ai,            prefix="/api/ai",             tags=["AI Copilot"])
 app.include_router(auth,          prefix="/api/auth",           tags=["Auth & Onboarding"])
+
+
+# ── Config Startup Validation ───────────────────────────────────────────────
+@app.on_event("startup")
+async def validate_config():
+    missing = []
+    # Check if required environment variables are present and not placeholders
+    if not getattr(settings, "supabase_url", None) or "your-project" in settings.supabase_url:
+        missing.append("SUPABASE_URL")
+    if not getattr(settings, "supabase_service_key", None) or "your-service-role" in settings.supabase_service_key:
+        missing.append("SUPABASE_SERVICE_KEY")
+    if not getattr(settings, "openai_api_key", None) or "your-openai" in settings.openai_api_key:
+        missing.append("OPENAI_API_KEY")
+    if missing:
+        raise RuntimeError(f"Missing or invalid env vars: {missing}")
+    logger.info("✅ All required env vars present")
 
 
 # ── Startup Health Check ─────────────────────────────────────────────────────
@@ -85,8 +102,9 @@ async def health_check():
 # ── Root ─────────────────────────────────────────────────────────────────────
 @app.get("/")
 async def root():
+    is_prod = (settings.environment == "production")
     return {
         "status": "healthy",
         "service": settings.app_name,
-        "api_docs": "/docs" if settings.debug else "hidden",
+        "api_docs": "hidden" if is_prod else "/docs",
     }
