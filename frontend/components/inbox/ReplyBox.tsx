@@ -85,21 +85,28 @@ export function ReplyBox({ conversationId, aiEnabled, onSend, onToggleAI }: Repl
           <span className="font-semibold text-muted-foreground">AI Auto-reply</span>
         </label>
 
-        {/* Suggestion action */}
-        <Button
-          onClick={handleFetchSuggestion}
-          disabled={isSuggesting}
-          variant="outline"
-          size="sm"
-          className="h-8 border-indigo-500/20 bg-indigo-500/5 text-indigo-400 hover:bg-indigo-500/10 text-xs flex items-center gap-1.5 shadow-sm"
-        >
-          {isSuggesting ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Sparkles className="h-3.5 w-3.5 fill-current" />
-          )}
-          AI Suggestion
-        </Button>
+        {/* Suggestion action & Character Counter */}
+        <div className="flex items-center gap-3">
+          <span className={`font-medium text-[10px] sm:text-xs tracking-wider transition-colors ${
+            text.length >= 4096 ? "text-rose-500 font-bold" : "text-muted-foreground/80"
+          }`}>
+            {text.length} / 4096
+          </span>
+          <Button
+            onClick={handleFetchSuggestion}
+            disabled={isSuggesting}
+            variant="outline"
+            size="sm"
+            className="h-8 border-indigo-500/20 bg-indigo-500/5 text-indigo-400 hover:bg-indigo-500/10 text-xs flex items-center gap-1.5 shadow-sm"
+          >
+            {isSuggesting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="h-3.5 w-3.5 fill-current" />
+            )}
+            AI Suggestion
+          </Button>
+        </div>
       </div>
 
       {/* Inputs toolbar */}
@@ -108,6 +115,7 @@ export function ReplyBox({ conversationId, aiEnabled, onSend, onToggleAI }: Repl
           ref={textareaRef}
           rows={1}
           value={text}
+          maxLength={4096}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -121,7 +129,7 @@ export function ReplyBox({ conversationId, aiEnabled, onSend, onToggleAI }: Repl
         
         <Button
           onClick={handleSend}
-          disabled={!text.trim() || isSending}
+          disabled={!text.trim() || text.length > 4096 || isSending}
           className="h-10 w-10 shrink-0 rounded-xl bg-primary text-white hover:opacity-90 shadow-md transition-opacity"
         >
           {isSending ? (

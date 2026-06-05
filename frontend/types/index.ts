@@ -2,6 +2,7 @@ export interface Contact {
   id: string;
   name: string;
   phone_number: string;
+  phone?: string;
   email?: string;
   avatar_url?: string;
   created_at: string;
@@ -18,6 +19,7 @@ export interface Conversation {
   contact?: Contact;
   assigned_to?: string | null;
   ai_enabled: boolean;
+  channel?: string;
 }
 
 export interface Message {

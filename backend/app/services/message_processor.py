@@ -286,19 +286,19 @@ async def _process_ai_reply_inner(
     )
 
     # ── Send reply via correct channel ────────────────────────────────────────
-    outbound_id: Optional[str] = None
+    outbound_ids: list[str] = []
     if channel == "twilio":
-        outbound_id = await whatsapp_service.send_twilio_message(sender_phone, ai_reply)
+        outbound_ids = await whatsapp_service.send_twilio_message(sender_phone, ai_reply)
     else:
-        outbound_id = await whatsapp_service.send_whatsapp_message(
+        outbound_ids = await whatsapp_service.send_whatsapp_message(
             phone=sender_phone,
             message=ai_reply,
             phone_number_id=phone_number_id,
             token=org.get("whatsapp_token", ""),
         )
     logger.info(
-        "[MsgProcessor] Outbound sent | channel=%s | phone=...%s | outbound_id=%s",
-        channel, phone_tail, outbound_id,
+        "[MsgProcessor] Outbound sent | channel=%s | phone=...%s | outbound_ids=%s",
+        channel, phone_tail, outbound_ids,
     )
 
     # ── Determine final status ────────────────────────────────────────────────
@@ -306,12 +306,13 @@ async def _process_ai_reply_inner(
 
     # ── Save AI reply message ─────────────────────────────────────────────────
     try:
+        channel_msg_id = outbound_ids[0] if outbound_ids else None
         ai_msg_ins = supabase_client.table("messages").insert({
             "conversation_id": conversation_id,
             "org_id": org_id,
             "sender_type": "ai",
             "content": ai_reply,
-            "channel_message_id": outbound_id,
+            "channel_message_id": channel_msg_id,
             "ai_confidence": confidence,
             "status": final_status,
         }).execute()

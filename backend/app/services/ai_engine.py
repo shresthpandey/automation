@@ -115,7 +115,7 @@ class AIEngineService:
                 model=self.model,
                 messages=messages_payload,
                 temperature=0.3,
-                max_tokens=500,
+                max_tokens=400,
             )
         except openai.RateLimitError as exc:
             if attempt == 0:
@@ -214,6 +214,9 @@ class AIEngineService:
                 f"You are an AI customer support assistant for {org_name}.\n"
                 "Answer questions based ONLY on the provided knowledge base context.\n"
                 "Be helpful, concise, and friendly.\n"
+                "IMPORTANT: Keep your response under 300 words. Be concise and direct. "
+                "If you need to share a lot of information, summarize the key points "
+                "and offer to provide more details if needed.\n"
                 "If the answer is not in the context, say: 'Let me connect you with our team for this query.'\n"
                 "Always respond in the same language the customer used.\n\n"
                 f"Knowledge Base Context:\n{context_text}\n\n"
@@ -239,6 +242,24 @@ class AIEngineService:
 
             reply_text = response.choices[0].message.content
             tokens_used = response.usage.total_tokens if response.usage else 0
+
+            # Post-generation length check and shortening
+            if len(reply_text) > 3500:
+                try:
+                    logger.info("[AI] Reply too long (%d chars) — requesting shortening...", len(reply_text))
+                    shorten_response = self.client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[
+                            {"role": "user", "content": f"Shorten this to under 200 words while keeping key info:\n\n{reply_text}"}
+                        ],
+                        max_tokens=300
+                    )
+                    if shorten_response.choices and shorten_response.choices[0].message.content:
+                        reply_text = shorten_response.choices[0].message.content
+                        logger.info("[AI] Shortened reply to %d chars", len(reply_text))
+                except Exception as exc:
+                    log_error("OpenAIError", f"Failed to shorten long response: {str(exc)}", exc)
+
             latency_ms = int((time.monotonic() - t0) * 1000)
 
             logger.info(
