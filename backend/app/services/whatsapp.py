@@ -181,225 +181,39 @@ class WhatsAppService:
             tok = token or settings.whatsapp_token
             return await self.send_whatsapp_message(phone, message, p_id, tok)
 
-    # ──────────────────────────────────────────────
-    # Incoming Message Processor (Meta + Twilio)
-    # ──────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────────────
+    # NOTE: process_incoming_message() has been superseded by message_processor.
+    # The fast-path (save_incoming_message) and slow-path (process_ai_reply)
+    # are now in backend/app/services/message_processor.py.
+    # This stub exists only for backwards compatibility with any stray callers.
+    # ──────────────────────────────────────────────────────────────────────────
     async def process_incoming_message(self, payload: dict, is_twilio: bool = False) -> None:
         """
-        Processes incoming WhatsApp messages from Meta or Twilio.
-        All Supabase calls wrapped in SupabaseError handlers.
+        Deprecated — use message_processor.save_incoming_message() +
+        message_processor.process_ai_reply() instead.
+
+        This stub delegates to the new functions for backwards compatibility.
         """
-        try:
-            if is_twilio:
-                from_val = payload.get("From", "")
-                to_val = payload.get("To", "")
-                sender_phone = from_val.replace("whatsapp:", "").replace("+", "").strip()
-                phone_number_id = to_val.replace("whatsapp:", "").replace("+", "").strip()
-                message_id = payload.get("MessageSid", "")
-                content = payload.get("Body", "")
-                profile_name = "Twilio WhatsApp User"
-                channel = "twilio"
+        from app.services.message_processor import save_incoming_message, process_ai_reply
+        from app.routers.webhooks import _parse_meta_payload, _parse_twilio_payload
 
-                logger.info(
-                    "[Webhook] Twilio inbound | phone=...%s | type=text | len=%d",
-                    sender_phone[-4:] if len(sender_phone) >= 4 else sender_phone,
-                    len(content),
-                )
-            else:
-                entry = payload.get("entry", [])[0]
-                changes = entry.get("changes", [])[0]
-                value = changes.get("value", {})
-                messages = value.get("messages", [])
-                metadata = value.get("metadata", {})
+        if is_twilio:
+            message_data = _parse_twilio_payload(payload)
+        else:
+            message_data = _parse_meta_payload(payload)
 
-                if not messages:
-                    logger.info("[Webhook] Meta payload received with no messages block. Skipping.")
-                    return
+        if not message_data:
+            return
 
-                msg = messages[0]
-                sender_phone = msg.get("from", "")
-                message_id = msg.get("id", "")
-                msg_type = msg.get("type", "text")
-
-                if msg_type == "text":
-                    content = msg.get("text", {}).get("body", "")
-                elif msg_type in ("image", "audio", "document"):
-                    media_info = msg.get(msg_type, {})
-                    content = f"[Media: {msg_type.upper()}] ID={media_info.get('id')} mime={media_info.get('mime_type')}"
-                else:
-                    content = f"[Unsupported: {msg_type}]"
-
-                phone_number_id = metadata.get("phone_number_id", "")
-                profile_name = value.get("contacts", [{}])[0].get("profile", {}).get("name", "WhatsApp User")
-                channel = "whatsapp"
-
-                logger.info(
-                    "[Webhook] Meta inbound | phone=...%s | type=%s | len=%d",
-                    sender_phone[-4:] if len(sender_phone) >= 4 else sender_phone,
-                    msg_type,
-                    len(content),
-                )
-
-            if not phone_number_id:
-                logger.error("[Webhook] Missing phone_number_id — cannot route to org.")
-                return
-
-            # ── Layer 2: DB idempotency check ─────────────────────────────────────
-            # Check messages table BEFORE doing any org/contact/conversation work.
-            # This is the definitive check: if the wamid/SID is already in DB,
-            # this is a duplicate delivery and we must not process it again.
-            if message_id:
-                try:
-                    dup_res = supabase_client.table("messages") \
-                        .select("id") \
-                        .eq("channel_message_id", message_id) \
-                        .limit(1) \
-                        .execute()
-                    if dup_res.data:
-                        logger.info(
-                            "[Idempotency] Duplicate message detected in DB, skipping | msg_id=%s",
-                            message_id,
-                        )
-                        return
-                except Exception as exc:
-                    # On DB error: proceed (fail open) — DB unique index is the final safety net
-                    logger.warning(
-                        "[Idempotency] DB dedup check failed (proceeding): %s", str(exc)
-                    )
-
-            # ── Org lookup ──────────────────────────
-            try:
-                org_res = supabase_client.table("organizations") \
-                    .select("id, whatsapp_token") \
-                    .eq("whatsapp_phone_number_id", phone_number_id) \
-                    .execute()
-            except Exception as exc:
-                raise SupabaseError(f"Org lookup failed for phone_number_id={phone_number_id}", str(exc))
-
-            if not org_res.data:
-                try:
-                    fallback = supabase_client.table("organizations").select("id, whatsapp_token").limit(1).execute()
-                    org = fallback.data[0] if fallback.data else None
-                except Exception as exc:
-                    raise SupabaseError("Fallback org lookup failed", str(exc))
-                if not org:
-                    logger.error("[Webhook] No org found for phone_number_id=%s", phone_number_id)
-                    return
-            else:
-                org = org_res.data[0]
-
-            org_id = org["id"]
-            org_whatsapp_token = org["whatsapp_token"]
-
-            # ── Contact upsert ──────────────────────
-            try:
-                contact_res = supabase_client.table("contacts") \
-                    .select("*") \
-                    .eq("org_id", org_id) \
-                    .eq("phone", sender_phone) \
-                    .execute()
-            except Exception as exc:
-                raise SupabaseError(f"Contact lookup failed for phone=...{sender_phone[-4:]}", str(exc))
-
-            if not contact_res.data:
-                try:
-                    ins = supabase_client.table("contacts").insert({
-                        "org_id": org_id,
-                        "phone": sender_phone,
-                        "name": profile_name,
-                        "source": channel,
-                    }).execute()
-                    contact = ins.data[0]
-                    logger.info("[CRM] New contact created: ...%s", sender_phone[-4:])
-                except Exception as exc:
-                    raise SupabaseError("Contact insert failed", str(exc))
-            else:
-                contact = contact_res.data[0]
-
-            # ── Conversation upsert ─────────────────
-            try:
-                conv_res = supabase_client.table("conversations") \
-                    .select("*") \
-                    .eq("org_id", org_id) \
-                    .eq("contact_id", contact["id"]) \
-                    .eq("status", "open") \
-                    .execute()
-            except Exception as exc:
-                raise SupabaseError("Conversation lookup failed", str(exc))
-
-            if not conv_res.data:
-                try:
-                    ins_conv = supabase_client.table("conversations").insert({
-                        "org_id": org_id,
-                        "contact_id": contact["id"],
-                        "status": "open",
-                        "channel": channel,
-                    }).execute()
-                    conversation = ins_conv.data[0]
-                    logger.info("[Conv] New conversation opened for contact %s", contact["id"])
-                except Exception as exc:
-                    raise SupabaseError("Conversation insert failed", str(exc))
-            else:
-                conversation = conv_res.data[0]
-
-            # ── Save inbound message ────────────────
-            try:
-                supabase_client.table("messages").insert({
-                    "conversation_id": conversation["id"],
-                    "org_id": org_id,
-                    "sender_type": "contact",
-                    "content": content,
-                    "channel_message_id": message_id,
-                }).execute()
-            except Exception as exc:
-                raise SupabaseError("Message insert failed", str(exc))
-
-            # ── AI reply ───────────────────────────
-            if conversation.get("ai_enabled", True):
-                from app.services.ai_engine import ai_engine_service
-                t0 = time.monotonic()
-
-                ai_res = ai_engine_service.generate_reply(
-                    message=content,
-                    conversation_id=conversation["id"],
-                    org_id=org_id,
-                    contact=contact,
-                )
-                latency_ms = int((time.monotonic() - t0) * 1000)
-
-                ai_reply = ai_res.get("reply", "")
-                confidence = ai_res.get("confidence", 0.0)
-                tokens_used = ai_res.get("tokens_used", 0)
-
-                logger.info(
-                    "[AI] Reply generated | org=%s | confidence=%.2f | tokens=%d | latency=%dms",
-                    org_id, confidence, tokens_used, latency_ms,
-                )
-
-                if channel == "twilio":
-                    outbound_id = await self.send_twilio_message(sender_phone, ai_reply)
-                else:
-                    outbound_id = await self.send_whatsapp_message(
-                        sender_phone, ai_reply, phone_number_id, org_whatsapp_token
-                    )
-
-                try:
-                    supabase_client.table("messages").insert({
-                        "conversation_id": conversation["id"],
-                        "org_id": org_id,
-                        "sender_type": "ai",
-                        "content": ai_reply,
-                        "channel_message_id": outbound_id,
-                        "ai_confidence": confidence,
-                    }).execute()
-                except Exception as exc:
-                    raise SupabaseError("AI message save failed", str(exc))
-
-        except SupabaseError as exc:
-            log_error("SupabaseError", exc.message, exc)
-        except Exception as exc:
-            log_error("UnhandledException", f"process_incoming_message crashed: {str(exc)}", exc)
+        save_result = await save_incoming_message(message_data)
+        if save_result:
+            await process_ai_reply(
+                message_data=message_data,
+                save_result=save_result,
+                message_id_for_lock="",
+            )
 
 
 # Singleton
 whatsapp_service = WhatsAppService()
+
