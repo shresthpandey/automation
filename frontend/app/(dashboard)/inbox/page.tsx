@@ -137,7 +137,7 @@ export default function InboxPage() {
         body: JSON.stringify({
           content,
           sender_type: "agent",
-          channel: "whatsapp"
+          channel: activeConversation?.channel || "twilio"
         })
       });
 
